@@ -36,7 +36,11 @@
       "destination": "/public/admin/vehicles.html"
     },
     {
-      "source": "/admin/?(.*)",
+      "source": "/admin",
+      "destination": "/public/admin/index.html"
+    },
+    {
+      "source": "/admin/(.*)",
       "destination": "/public/admin/index.html"
     },
     {
