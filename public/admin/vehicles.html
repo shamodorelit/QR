@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vehicle Management — Admin</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="admin-layout">
+
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-icon">🛡</div>
+      <div><div class="brand-name">Fuel QR Admin</div><div class="brand-sub">Management Portal</div></div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="/admin/dashboard.html"><span class="nav-icon">📊</span> Dashboard</a>
+      <a href="/admin/users.html"><span class="nav-icon">👥</span> Users</a>
+      <a href="/admin/vehicles.html" class="active"><span class="nav-icon">🚗</span> Vehicles</a>
+      <a href="/scan.html" target="_blank"><span class="nav-icon">📡</span> Scan Portal</a>
+    </nav>
+    <div class="sidebar-footer">
+      <button id="logoutBtn" class="btn btn-danger" style="width:100%;border-radius:var(--radius-sm);">🚪 Logout</button>
+    </div>
+  </aside>
+
+  <main class="admin-main">
+    <div class="admin-topbar">
+      <div>
+        <h1>🚗 Vehicle Management</h1>
+        <p style="color:var(--text-secondary);font-size:0.85rem;margin-top:2px;">All registered vehicles across the system</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">All Vehicles</span>
+        <span id="vehicleCount" class="badge badge-cyan">Loading...</span>
+      </div>
+      <div id="vehiclesContainer"><div class="empty-state"><div class="spinner"></div></div></div>
+    </div>
+  </main>
+</div>
+
+<script>
+const token = localStorage.getItem('fuelqr_admin_token');
+if (!token) window.location.href = '/admin/index.html';
+
+document.getElementById('logoutBtn').addEventListener('click', logout);
+function logout() {
+  localStorage.removeItem('fuelqr_admin_token');
+  localStorage.removeItem('fuelqr_admin');
+  window.location.href = '/admin/index.html';
+}
+function authH() { return { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }; }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+async function loadVehicles() {
+  try {
+    const res = await fetch('/api/admin/vehicles', { headers: authH() });
+    if (res.status === 401 || res.status === 403) { logout(); return; }
+    const vehicles = await res.json();
+    document.getElementById('vehicleCount').textContent = `${vehicles.length} vehicles`;
+
+    const container = document.getElementById('vehiclesContainer');
+    if (vehicles.length === 0) {
+      container.innerHTML = `<div class="empty-state"><div class="empty-icon">🚗</div><h3>No vehicles registered</h3></div>`;
+      return;
+    }
+
+    container.innerHTML = `<div class="table-wrapper"><table>
+      <thead><tr><th>Vehicle Number</th><th>Fuel Type</th><th>Chassis No</th><th>Owner</th><th>Registered</th><th>Actions</th></tr></thead>
+      <tbody>${vehicles.map(v => `
+        <tr>
+          <td><strong style="font-size:1rem;background:var(--gradient-primary);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">${esc(v.vehicle_number)}</strong></td>
+          <td><span class="badge ${v.fuel_type==='Petrol'?'badge-blue':'badge-orange'}">${v.fuel_type==='Petrol'?'⚡':'🛢'} ${esc(v.fuel_type)}</span></td>
+          <td style="font-family:monospace;font-size:0.85rem;">${esc(v.chassis_number)}</td>
+          <td>
+            <strong>${esc((v.user_id?.first_name||'') + ' ' + (v.user_id?.last_name||''))}</strong><br>
+            <span style="font-size:0.78rem;color:var(--text-muted);">${esc(v.user_id?.mobile||'')}</span>
+          </td>
+          <td>${new Date(v.createdAt).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}</td>
+          <td><button class="btn btn-danger btn-sm del-vehicle-btn" data-id="${esc(v._id)}" data-number="${esc(v.vehicle_number)}">🗑 Delete</button></td>
+        </tr>`).join('')}
+      </tbody></table></div>`;
+  } catch (err) {
+    document.getElementById('vehiclesContainer').innerHTML = `<div class="alert alert-error">Failed to load vehicles.</div>`;
+  }
+}
+
+// Event Delegation for Delete Buttons
+document.getElementById('vehiclesContainer').addEventListener('click', function(e) {
+  const btn = e.target.closest('.del-vehicle-btn');
+  if (btn) {
+    deleteVehicle(btn.dataset.id, btn.dataset.number);
+  }
+});
+
+async function deleteVehicle(id, number) {
+  if (!confirm(`Delete vehicle ${number}?\nThis removes the vehicle, QR code, and all scan history.`)) return;
+  try {
+    const res = await fetch(`/api/admin/vehicles/${id}`, { method: 'DELETE', headers: authH() });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Delete failed');
+    loadVehicles();
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+}
+
+loadVehicles();
+</script>
+</body>
+</html>

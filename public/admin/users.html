@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Management — Admin</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="admin-layout">
+
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-icon">🛡</div>
+      <div><div class="brand-name">Fuel QR Admin</div><div class="brand-sub">Management Portal</div></div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="/admin/dashboard.html"><span class="nav-icon">📊</span> Dashboard</a>
+      <a href="/admin/users.html" class="active"><span class="nav-icon">👥</span> Users</a>
+      <a href="/admin/vehicles.html"><span class="nav-icon">🚗</span> Vehicles</a>
+      <a href="/scan.html" target="_blank"><span class="nav-icon">📡</span> Scan Portal</a>
+    </nav>
+    <div class="sidebar-footer">
+      <button id="logoutBtn" class="btn btn-danger" style="width:100%;border-radius:var(--radius-sm);">🚪 Logout</button>
+    </div>
+  </aside>
+
+  <main class="admin-main">
+    <div class="admin-topbar">
+      <div>
+        <h1>👥 User Management</h1>
+        <p style="color:var(--text-secondary);font-size:0.85rem;margin-top:2px;">Manage all registered vehicle owners</p>
+      </div>
+    </div>
+
+    <!-- Reset Password Modal -->
+    <div id="modalOverlay" class="modal-overlay hidden">
+      <div class="modal">
+        <div class="modal-title" id="modalTitle">Reset Password</div>
+        <div class="form-group">
+          <label class="form-label">New Password</label>
+          <input type="password" id="newPwd" class="form-control" placeholder="Min 6 characters">
+        </div>
+        <div id="modalAlert" class="hidden"></div>
+        <div style="display:flex;gap:10px;margin-top:16px;">
+          <button id="confirmResetBtn" class="btn btn-primary" style="flex:1;">Reset Password</button>
+          <button id="cancelModalBtn" class="btn btn-outline">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">All Users</span>
+        <span id="userCount" class="badge badge-blue">Loading...</span>
+      </div>
+      <div id="usersContainer"><div class="empty-state"><div class="spinner"></div></div></div>
+    </div>
+  </main>
+</div>
+
+<script>
+const token = localStorage.getItem('fuelqr_admin_token');
+if (!token) window.location.href = '/admin/index.html';
+
+document.getElementById('logoutBtn').addEventListener('click', logout);
+document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
+document.getElementById('modalOverlay').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+function logout() {
+  localStorage.removeItem('fuelqr_admin_token');
+  localStorage.removeItem('fuelqr_admin');
+  window.location.href = '/admin/index.html';
+}
+function authH() { return { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }; }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+let currentResetId = null;
+
+async function loadUsers() {
+  try {
+    const res = await fetch('/api/admin/users', { headers: authH() });
+    if (res.status === 401 || res.status === 403) { logout(); return; }
+    const users = await res.json();
+    document.getElementById('userCount').textContent = `${users.length} users`;
+
+    const container = document.getElementById('usersContainer');
+    if (users.length === 0) {
+      container.innerHTML = `<div class="empty-state"><div class="empty-icon">👥</div><h3>No users registered</h3></div>`;
+      return;
+    }
+
+    container.innerHTML = `<div class="table-wrapper"><table>
+      <thead><tr><th>Name</th><th>Mobile</th><th>Address</th><th>Vehicles</th><th>Status</th><th>Registered</th><th>Actions</th></tr></thead>
+      <tbody>${users.map(u => `
+        <tr>
+          <td><strong>${esc(u.first_name)} ${esc(u.last_name)}</strong></td>
+          <td>📞 ${esc(u.mobile)}</td>
+          <td>${esc(u.address)}</td>
+          <td><span class="badge badge-blue">🚗 ${u.vehicleCount || 0}</span></td>
+          <td><span class="badge ${u.is_active ? 'badge-green' : 'badge-red'}">${u.is_active ? '✅ Active' : '🚫 Disabled'}</span></td>
+          <td>${new Date(u.createdAt).toLocaleDateString('en-GB')}</td>
+          <td>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <button class="btn btn-outline btn-sm reset-btn" data-id="${esc(u._id)}" data-name="${esc(u.first_name + ' ' + u.last_name)}">🔑 Reset</button>
+              <button class="btn btn-sm toggle-btn ${u.is_active ? 'btn-danger' : 'btn-success'}"
+                data-id="${esc(u._id)}" data-active="${u.is_active}">
+                ${u.is_active ? '🚫 Disable' : '✅ Enable'}
+              </button>
+              <button class="btn btn-danger btn-sm del-user-btn" data-id="${esc(u._id)}" data-name="${esc(u.first_name)}">🗑 Delete</button>
+            </div>
+          </td>
+        </tr>`).join('')}
+      </tbody></table></div>`;
+  } catch (err) {
+    document.getElementById('usersContainer').innerHTML = `<div class="alert alert-error">Failed to load users.</div>`;
+  }
+}
+
+// Event Delegation for User Actions
+document.getElementById('usersContainer').addEventListener('click', function(e) {
+  const resetBtn = e.target.closest('.reset-btn');
+  const toggleBtn = e.target.closest('.toggle-btn');
+  const delBtn = e.target.closest('.del-user-btn');
+
+  if (resetBtn) openResetModal(resetBtn.dataset.id, resetBtn.dataset.name);
+  if (toggleBtn) toggleAccount(toggleBtn.dataset.id, toggleBtn.dataset.active === 'true');
+  if (delBtn) deleteUser(delBtn.dataset.id, delBtn.dataset.name);
+});
+
+function openResetModal(userId, name) {
+  currentResetId = userId;
+  document.getElementById('modalTitle').textContent = `Reset Password — ${name}`;
+  document.getElementById('newPwd').value = '';
+  document.getElementById('modalAlert').classList.add('hidden');
+  document.getElementById('modalOverlay').classList.remove('hidden');
+}
+
+document.getElementById('confirmResetBtn').addEventListener('click', async () => {
+  const pwd = document.getElementById('newPwd').value.trim();
+  if (!pwd || pwd.length < 6) { showModalAlert('Password must be at least 6 characters.', 'error'); return; }
+  try {
+    const res = await fetch(`/api/admin/users/${currentResetId}/reset`, {
+      method: 'PUT', headers: authH(),
+      body: JSON.stringify({ action: 'reset_password', new_password: pwd })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    showModalAlert('Password reset successfully!', 'success');
+    setTimeout(closeModal, 1500);
+  } catch (err) { showModalAlert(err.message, 'error'); }
+});
+
+function showModalAlert(msg, type) {
+  const el = document.getElementById('modalAlert');
+  el.className = `alert alert-${type}`;
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+function closeModal() {
+  document.getElementById('modalOverlay').classList.add('hidden');
+  currentResetId = null;
+}
+
+async function toggleAccount(userId, isActive) {
+  const action = isActive ? 'disable' : 'enable';
+  if (!confirm(isActive ? 'Disable this account? User will not be able to login.' : 'Enable this account?')) return;
+  try {
+    const res = await fetch(`/api/admin/users/${userId}/reset`, {
+      method: 'PUT', headers: authH(), body: JSON.stringify({ action })
+    });
+    if (!res.ok) throw new Error('Failed');
+    loadUsers();
+  } catch (err) { alert('Error: ' + err.message); }
+}
+
+async function deleteUser(userId, name) {
+  if (!confirm(`Delete user "${name}"?\nThis will permanently remove the user, all their vehicles, QR codes, and scan history.`)) return;
+  try {
+    const res = await fetch(`/api/admin/users/${userId}`, { method: 'DELETE', headers: authH() });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Delete failed');
+    loadUsers();
+  } catch (err) { alert('Error: ' + err.message); }
+}
+
+loadUsers();
+</script>
+</body>
+</html>

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vehicle QR Code — Fuel QR System</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="/dashboard.html" class="nav-brand"><span class="icon">⛽</span> Fuel QR System</a>
+  <div class="nav-links">
+    <a href="/dashboard.html">← Dashboard</a>
+    <a href="#" onclick="logout()" style="color:var(--accent-red)">Logout</a>
+  </div>
+</nav>
+
+<div style="max-width:600px;margin:40px auto;padding:0 20px;">
+  <div id="loading" class="empty-state"><div class="spinner"></div><p style="margin-top:16px;color:var(--text-secondary);">Loading QR code...</p></div>
+  <div id="content" class="hidden">
+    <div class="card" style="text-align:center;">
+      <div style="margin-bottom:20px;">
+        <div id="vehicleNum" style="font-size:2rem;font-weight:900;background:var(--gradient-primary);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:0.08em;"></div>
+        <div id="fuelBadge" style="margin-top:10px;"></div>
+        <div id="chassisInfo" style="font-size:0.85rem;color:var(--text-muted);margin-top:6px;"></div>
+      </div>
+
+      <!-- QR Code -->
+      <div style="background:white;display:inline-block;padding:16px;border-radius:16px;margin-bottom:20px;box-shadow:0 0 40px rgba(59,130,246,0.3),0 0 0 3px rgba(59,130,246,0.3);">
+        <img id="qrImage" src="" alt="Vehicle QR Code" style="width:240px;height:240px;display:block;">
+      </div>
+
+      <!-- Security info -->
+      <div class="alert alert-info" style="text-align:left;margin-bottom:20px;">
+        🔐 <strong>This QR code is AES-256 encrypted.</strong> It will be rejected if tampered with or replicated.
+      </div>
+
+      <!-- Actions -->
+      <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
+        <button onclick="downloadQR()" class="btn btn-primary">⬇ Download QR (PNG)</button>
+        <button onclick="downloadPDF()" class="btn btn-success">📄 Download PDF</button>
+        <button onclick="deleteVehicle()" class="btn btn-danger">🗑 Delete Vehicle</button>
+      </div>
+
+      <div style="margin-top:20px;font-size:0.8rem;color:var(--text-muted);">
+        Print and keep this QR code in your vehicle. Show it at the fuel shed.
+      </div>
+    </div>
+
+    <div class="card mt-4">
+      <div class="card-header"><span class="card-title">ℹ Vehicle Details</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;" id="vehicleDetails"></div>
+    </div>
+  </div>
+
+  <div id="errorState" class="hidden">
+    <div class="alert alert-error">Vehicle or QR code not found.</div>
+    <a href="/dashboard.html" class="btn btn-outline mt-4">← Back to Dashboard</a>
+  </div>
+</div>
+
+<script>
+  const token = localStorage.getItem('fuelqr_token');
+  if (!token) window.location.href = '/login.html';
+
+  function logout() {
+    localStorage.removeItem('fuelqr_token');
+    localStorage.removeItem('fuelqr_user');
+    window.location.href = '/login.html';
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const vehicleId = params.get('id');
+  if (!vehicleId) window.location.href = '/dashboard.html';
+
+  let vehicleData = null;
+
+  async function load() {
+    try {
+      const res = await fetch(`/api/vehicles/${vehicleId}/qr`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Not found');
+      vehicleData = await res.json();
+
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('content').classList.remove('hidden');
+
+      document.getElementById('vehicleNum').textContent = vehicleData.vehicle_number;
+      document.getElementById('fuelBadge').innerHTML = `
+        <span class="badge ${vehicleData.fuel_type === 'Petrol' ? 'badge-blue' : 'badge-orange'}" style="font-size:0.95rem;padding:6px 18px;">
+          ${vehicleData.fuel_type === 'Petrol' ? '⚡' : '🛢'} ${vehicleData.fuel_type}
+        </span>`;
+      document.getElementById('chassisInfo').textContent = `Chassis: ${vehicleData.chassis_number}`;
+      document.getElementById('qrImage').src = vehicleData.qr_image_base64;
+
+      document.getElementById('vehicleDetails').innerHTML = `
+        <div><div style="font-size:0.75rem;color:var(--text-secondary);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Vehicle Number</div>
+          <div style="font-weight:700;">${vehicleData.vehicle_number}</div></div>
+        <div><div style="font-size:0.75rem;color:var(--text-secondary);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Fuel Type</div>
+          <div style="font-weight:700;">${vehicleData.fuel_type}</div></div>
+        <div><div style="font-size:0.75rem;color:var(--text-secondary);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Chassis Number</div>
+          <div style="font-weight:700;">${vehicleData.chassis_number}</div></div>
+        <div><div style="font-size:0.75rem;color:var(--text-secondary);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Registered On</div>
+          <div style="font-weight:700;">${new Date(vehicleData.createdAt).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</div></div>`;
+    } catch (err) {
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('errorState').classList.remove('hidden');
+    }
+  }
+
+  function downloadQR() {
+    const link = document.createElement('a');
+    link.href = vehicleData.qr_image_base64;
+    link.download = `QR_${vehicleData.vehicle_number.replace(/\s/g,'_')}.png`;
+    link.click();
+  }
+
+  function downloadPDF() {
+    const w = window.open('', '_blank');
+    w.document.write(`<!DOCTYPE html><html><head><title>QR Code – ${vehicleData.vehicle_number}</title>
+    <style>body{font-family:Arial,sans-serif;text-align:center;padding:40px;background:#fff;color:#000;}
+    h1{font-size:28px;font-weight:900;letter-spacing:4px;margin-bottom:8px;}
+    .fuel{font-size:16px;color:#555;margin-bottom:30px;}
+    img{width:260px;height:260px;border:3px solid #333;padding:10px;border-radius:8px;}
+    .chassis{margin-top:16px;font-size:13px;color:#777;}
+    .notice{margin-top:30px;font-size:12px;color:#999;border-top:1px solid #ddd;padding-top:20px;}
+    </style></head><body>
+    <h1>${vehicleData.vehicle_number}</h1>
+    <div class="fuel">Fuel Type: ${vehicleData.fuel_type}</div>
+    <img src="${vehicleData.qr_image_base64}" alt="QR Code">
+    <div class="chassis">Chassis No: ${vehicleData.chassis_number}</div>
+    <div class="notice">⚠ This QR code is encrypted and verified by the Fuel QR System.<br>Present at the fuel shed before refueling.</div>
+    </body></html>`);
+    w.document.close();
+    setTimeout(() => w.print(), 500);
+  }
+
+  async function deleteVehicle() {
+    if (!confirm(`Delete vehicle ${vehicleData?.vehicle_number}?\nThis cannot be undone.`)) return;
+    try {
+      const res = await fetch(`/api/vehicles/${vehicleId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Delete failed');
+      window.location.href = '/dashboard.html';
+    } catch (err) {
+      alert('Failed to delete: ' + err.message);
+    }
+  }
+
+  load();
+</script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "server.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "public/**",
+      "use": "@vercel/static"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/server.js"
+    },
+    {
+      "source": "/css/(.*)",
+      "destination": "/public/css/$1"
+    },
+    {
+      "source": "/js/(.*)",
+      "destination": "/public/js/$1"
+    },
+    {
+      "source": "/admin/dashboard.html",
+      "destination": "/public/admin/dashboard.html"
+    },
+    {
+      "source": "/admin/users.html",
+      "destination": "/public/admin/users.html"
+    },
+    {
+      "source": "/admin/vehicles.html",
+      "destination": "/public/admin/vehicles.html"
+    },
+    {
+      "source": "/admin/?(.*)",
+      "destination": "/public/admin/index.html"
+    },
+    {
+      "source": "/(.*\\.html)",
+      "destination": "/public/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/public/index.html"
+    }
+  ]
+}

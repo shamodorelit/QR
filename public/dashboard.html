@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — Fuel QR System</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="/dashboard.html" class="nav-brand"><span class="icon">⛽</span> Fuel QR System</a>
+  <div class="nav-user">
+    <span class="welcome" id="welcomeMsg">Welcome!</span>
+    <div class="nav-links">
+      <a href="/dashboard.html" class="active">Dashboard</a>
+      <a href="/add-vehicle.html">Add Vehicle</a>
+      <a href="#" id="logoutBtn" style="color:var(--accent-red)">Logout</a>
+    </div>
+  </div>
+</nav>
+
+<main style="padding:28px;max-width:1200px;margin:0 auto;">
+  <!-- Stats -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue">🚗</div>
+      <div class="stat-info"><div class="value" id="totalVehicles">—</div><div class="label">My Vehicles</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon cyan">📡</div>
+      <div class="stat-info"><div class="value" id="totalScans">—</div><div class="label">Total Scans</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green">✅</div>
+      <div class="stat-info"><div class="value" id="lastScan">—</div><div class="label">Last Scan</div></div>
+    </div>
+    <div class="stat-card" style="cursor:pointer;" onclick="window.location.href='/add-vehicle.html'">
+      <div class="stat-icon purple">➕</div>
+      <div class="stat-info"><div class="value" style="font-size:1.1rem;font-weight:700;">Add Vehicle</div><div class="label">Register New</div></div>
+    </div>
+  </div>
+
+  <!-- Vehicles -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <span class="card-title">🚗 My Vehicles</span>
+      <a href="/add-vehicle.html" class="btn btn-primary btn-sm">+ Add Vehicle</a>
+    </div>
+    <div id="vehiclesContainer"><div class="empty-state"><div class="spinner"></div></div></div>
+  </div>
+
+  <!-- Scan History -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">📡 Recent Scan History</span></div>
+    <div id="historyContainer"><div class="empty-state"><div class="spinner"></div></div></div>
+  </div>
+</main>
+
+<script>
+const token = localStorage.getItem('fuelqr_token');
+if (!token) window.location.href = '/login.html';
+
+const user = JSON.parse(localStorage.getItem('fuelqr_user') || '{}');
+document.getElementById('welcomeMsg').textContent = `Welcome, ${user.first_name || ''}!`;
+document.getElementById('logoutBtn').addEventListener('click', logout);
+
+function logout() {
+  localStorage.removeItem('fuelqr_token');
+  localStorage.removeItem('fuelqr_user');
+  window.location.href = '/login.html';
+}
+function authH() { return { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }; }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+async function loadVehicles() {
+  try {
+    const res = await fetch('/api/vehicles', { headers: authH() });
+    if (res.status === 401) { logout(); return; }
+    const vehicles = await res.json();
+    document.getElementById('totalVehicles').textContent = vehicles.length;
+
+    const container = document.getElementById('vehiclesContainer');
+    if (vehicles.length === 0) {
+      container.innerHTML = `<div class="empty-state"><div class="empty-icon">🚗</div><h3>No vehicles registered</h3><p>Add your first vehicle to generate a QR code</p><a href="/add-vehicle.html" class="btn btn-primary mt-4">Add Vehicle</a></div>`;
+      return;
+    }
+
+    container.innerHTML = `<div class="vehicle-grid" id="vehicleGrid">${vehicles.map(v => `
+      <div class="vehicle-card">
+        <div class="vehicle-number">${esc(v.vehicle_number)}</div>
+        <div class="vehicle-meta">
+          <span class="badge ${v.fuel_type === 'Petrol' ? 'badge-blue' : 'badge-orange'}">${v.fuel_type === 'Petrol' ? '⚡' : '🛢'} ${esc(v.fuel_type)}</span>
+          <span class="badge badge-gray">🔑 ${esc(v.chassis_number)}</span>
+        </div>
+        <div class="text-sm text-muted">Added: ${new Date(v.createdAt).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}</div>
+        <div class="vehicle-actions">
+          <a href="/vehicle-qr.html?id=${esc(v._id)}" class="btn btn-primary btn-sm" style="flex:1;">📱 View QR</a>
+          <button class="btn btn-danger btn-sm delete-vehicle-btn" data-id="${esc(v._id)}" data-number="${esc(v.vehicle_number)}">🗑 Delete</button>
+        </div>
+      </div>`).join('')}</div>`;
+  } catch (err) {
+    document.getElementById('vehiclesContainer').innerHTML = `<div class="alert alert-error">Failed to load vehicles.</div>`;
+  }
+}
+
+// Event Delegation for Vehicles Container
+document.getElementById('vehiclesContainer').addEventListener('click', function(e) {
+  const btn = e.target.closest('.delete-vehicle-btn');
+  if (btn) {
+    deleteVehicle(btn.dataset.id, btn.dataset.number);
+  }
+});
+
+async function loadHistory() {
+  try {
+    const res = await fetch('/api/vehicles/scan-history', { headers: authH() });
+    const logs = await res.json();
+    document.getElementById('totalScans').textContent = logs.length;
+    document.getElementById('lastScan').textContent = logs.length > 0
+      ? new Date(logs[0].scanned_at).toLocaleDateString('en-GB') : 'None';
+
+    const container = document.getElementById('historyContainer');
+    if (logs.length === 0) {
+      container.innerHTML = `<div class="empty-state"><div class="empty-icon">📡</div><h3>No scans yet</h3><p>Scan history appears here after QR codes are scanned at fuel sheds.</p></div>`;
+      return;
+    }
+    container.innerHTML = `<div class="table-wrapper"><table>
+      <thead><tr><th>Date &amp; Time</th><th>Vehicle</th><th>Fuel Type</th><th>Fuel Shed</th></tr></thead>
+      <tbody>${logs.slice(0,20).map(log => `
+        <tr>
+          <td>${new Date(log.scanned_at).toLocaleString('en-GB',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</td>
+          <td><strong>${esc(log.vehicle_id?.vehicle_number||'—')}</strong></td>
+          <td><span class="badge ${log.vehicle_id?.fuel_type==='Petrol'?'badge-blue':'badge-orange'}">${esc(log.vehicle_id?.fuel_type||'—')}</span></td>
+          <td>⛽ ${esc(log.fuel_shed_id?.name||'—')}</td>
+        </tr>`).join('')}</tbody></table></div>`;
+  } catch (err) {
+    document.getElementById('historyContainer').innerHTML = `<div class="alert alert-error">Failed to load history.</div>`;
+  }
+}
+
+async function deleteVehicle(id, number) {
+  if (!confirm(`Delete vehicle ${number}?\nThis will also delete the QR code and scan history.`)) return;
+  try {
+    const res = await fetch(`/api/vehicles/${id}`, { method: 'DELETE', headers: authH() });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Delete failed');
+    loadVehicles();
+    loadHistory();
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+}
+
+loadVehicles();
+loadHistory();
+</script>
+</body>
+</html>

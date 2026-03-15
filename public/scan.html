@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fuel Shed Scan Portal — QR Verification</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    .scan-page { max-width:660px; margin:0 auto; padding:24px 16px; }
+    .scanner-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); }
+    .scanner-header { padding:18px 22px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+    .scanner-body { padding:22px; }
+    .scan-badge { display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border-radius:var(--radius-sm); font-size:0.82rem; font-weight:600; }
+    .badge-ready    { background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3); color:#10b981; }
+    .badge-scanning { background:rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.3); color:#3b82f6; }
+    .badge-process  { background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); color:#f59e0b; }
+    .badge-error    { background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.3); color:#ef4444; }
+    .tab-row { display:flex; gap:8px; margin-bottom:20px; }
+    .tab-btn { flex:1; padding:10px 6px; border-radius:var(--radius-sm); border:1px solid var(--border); background:transparent; color:var(--text-secondary); font-size:0.82rem; font-weight:600; cursor:pointer; transition:var(--transition); font-family:inherit; text-align:center; }
+    .tab-btn.on { background:rgba(59,130,246,0.15); border-color:rgba(59,130,246,0.45); color:#3b82f6; }
+    .tab-pane { display:none; }
+    .tab-pane.on { display:block; }
+    #reader { width:100%; border-radius:12px; overflow:hidden; background:#000; min-height:200px; }
+    #reader video { width:100% !important; border-radius:12px; }
+    #reader img { display:none !important; }
+    .upload-zone { border:2px dashed var(--border); border-radius:var(--radius-sm); padding:30px 16px; text-align:center; cursor:pointer; transition:var(--transition); }
+    .upload-zone:hover { border-color:var(--accent-blue); background:rgba(59,130,246,0.05); }
+  </style>
+</head>
+<body style="background:var(--gradient-bg);">
+
+<nav class="navbar">
+  <a href="#" class="nav-brand"><span class="icon">⛽</span> Fuel Shed Portal</a>
+  <div class="nav-links">
+    <a href="/login.html">User Portal</a>
+    <a href="/admin/index.html">Admin</a>
+  </div>
+</nav>
+
+<div class="scan-page">
+  <div style="margin-bottom:22px;">
+    <h1 style="font-size:1.5rem;font-weight:800;">📡 QR Scan Portal</h1>
+    <p style="color:var(--text-secondary);margin-top:4px;font-size:0.9rem;">Verify vehicle QR codes and record fuel transactions</p>
+  </div>
+
+  <!-- Shed Selector -->
+  <div class="card" style="margin-bottom:18px;">
+    <div style="font-weight:700;margin-bottom:10px;">⛽ Select Fuel Shed Location</div>
+    <select id="shedSelect" class="form-control" style="margin-bottom:0;">
+      <option value="">— Loading fuel sheds... —</option>
+    </select>
+    <div id="shedWarn" class="hidden" style="margin-top:8px;font-size:0.82rem;color:var(--accent-orange);">⚠ Please select a fuel shed first.</div>
+  </div>
+
+  <!-- Scanner Card -->
+  <div class="scanner-card">
+    <div class="scanner-header">
+      <span style="font-weight:700;">📱 QR Verification</span>
+      <div id="statusBadge" class="scan-badge badge-ready">🟢 Ready</div>
+    </div>
+    <div class="scanner-body">
+
+      <!-- Tabs -->
+      <div class="tab-row">
+        <button class="tab-btn on" id="tabCam" onclick="showTab('cam')">📷 Camera Scan</button>
+        <button class="tab-btn"    id="tabImg" onclick="showTab('img')">🖼 Photo Upload</button>
+        <button class="tab-btn"    id="tabTxt" onclick="showTab('txt')">⌨ Manual</button>
+      </div>
+
+      <!-- ── CAMERA TAB ── -->
+      <div class="tab-pane on" id="paneCam">
+        <!-- camera selector -->
+        <div id="camSelectorWrap" class="hidden" style="margin-bottom:12px;">
+          <select id="camSelect" class="form-control" style="margin-bottom:0;"></select>
+        </div>
+        <!-- video -->
+        <div id="reader"></div>
+        <!-- controls -->
+        <div style="margin-top:14px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;" id="camControls">
+          <button class="btn btn-primary" id="btnStart" onclick="startCamera()">▶ Start Camera</button>
+          <button class="btn btn-danger  hidden" id="btnStop"  onclick="stopCamera()">⏹ Stop</button>
+        </div>
+        <div id="camMsg" style="margin-top:12px;"></div>
+      </div>
+
+      <!-- ── PHOTO UPLOAD TAB ── -->
+      <div class="tab-pane" id="paneImg">
+        <div class="alert alert-info" style="margin-bottom:14px;font-size:0.85rem;">
+          📸 <strong>Works without HTTPS!</strong> Take a photo of the vehicle QR code and select it below.
+        </div>
+        <div class="upload-zone" onclick="document.getElementById('fileIn').click()">
+          <input type="file" id="fileIn" accept="image/*" capture="environment" style="display:none" onchange="scanFromFile(this)">
+          <div style="font-size:2.5rem;margin-bottom:8px;">📷</div>
+          <strong>Tap to Take Photo or Select Image</strong>
+          <p style="color:var(--text-secondary);font-size:0.82rem;margin-top:6px;">Camera opens automatically on mobile</p>
+        </div>
+        <div id="imgSpinner" class="hidden" style="text-align:center;padding:20px;">
+          <div class="spinner" style="margin:0 auto;width:32px;height:32px;border-width:3px;"></div>
+          <p style="margin-top:10px;color:var(--text-secondary);">Decoding QR from photo...</p>
+        </div>
+        <div id="imgErr" class="hidden alert alert-error" style="margin-top:12px;"></div>
+        <!-- Hidden canvas area for file scanning — must NOT be display:none -->
+        <div id="fileReader" style="visibility:hidden;width:1px;height:1px;overflow:hidden;position:absolute;"></div>
+      </div>
+
+      <!-- ── MANUAL TAB ── -->
+      <div class="tab-pane" id="paneTxt">
+        <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:10px;">Paste the raw encrypted QR data (copied from the QR image data).</p>
+        <textarea id="manualTxt" class="form-control" rows="4" placeholder="Paste encrypted QR string here (hexIV:hexData)..." style="resize:vertical;font-family:monospace;font-size:0.8rem;"></textarea>
+        <button class="btn btn-primary btn-full" onclick="verifyManual()" style="margin-top:12px;">🔍 Verify</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Result Container -->
+  <div id="resultBox"></div>
+</div>
+
+<script>
+// ─── State ───
+let qrScanner = null;
+let scanning = false;
+let lastSeen = '';
+
+// ─── Tab control ───
+function showTab(t) {
+  ['cam','img','txt'].forEach(id => {
+    document.getElementById('pane'+cap(id)).classList.remove('on');
+    document.getElementById('tab'+cap(id)).classList.remove('on');
+  });
+  document.getElementById('pane'+cap(t)).classList.add('on');
+  document.getElementById('tab'+cap(t)).classList.add('on');
+  if (scanning) stopCamera();
+}
+function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
+
+// ─── Shed ───
+async function loadSheds() {
+  try {
+    const r = await fetch('/api/fuel-sheds');
+    const sheds = await r.json();
+    const sel = document.getElementById('shedSelect');
+    sel.innerHTML = '<option value="">— Select Fuel Shed Location —</option>'
+      + sheds.map(s=>`<option value="${s._id}">${s.name} — ${s.location}</option>`).join('');
+  } catch(e){ console.error(e); }
+}
+function shed() {
+  const v = document.getElementById('shedSelect').value;
+  document.getElementById('shedWarn').classList.toggle('hidden', !!v);
+  return v || null;
+}
+
+// ─── Status badge ───
+function setStatus(cls, text){
+  const el = document.getElementById('statusBadge');
+  el.className = 'scan-badge '+cls;
+  el.textContent = text;
+}
+
+// ─────────────────────────────────────────────
+// CAMERA SCANNING  (uses getCameras → deviceId)
+// ─────────────────────────────────────────────
+async function startCamera() {
+  if (!shed()) return;
+
+  setCamMsg('','');
+  document.getElementById('btnStart').classList.add('hidden');
+  setStatus('badge-scanning','🔵 Starting...');
+
+  // 1. Request permission + enumerate cameras
+  let cameras;
+  try {
+    cameras = await Html5Qrcode.getCameras();
+  } catch(e) {
+    showCamError('Camera permission denied or no camera found.<br><small>Try <strong>🖼 Photo Upload</strong> tab instead.</small>');
+    return;
+  }
+  if (!cameras || cameras.length === 0) {
+    showCamError('No cameras detected on this device.<br><small>Use <strong>🖼 Photo Upload</strong> or <strong>⌨ Manual</strong> tab.</small>');
+    return;
+  }
+
+  // 2. Show selector if multiple cameras
+  if (cameras.length > 1) {
+    const sel = document.getElementById('camSelect');
+    sel.innerHTML = cameras.map((c,i)=>`<option value="${c.id}">${c.label||'Camera '+i}</option>`).join('');
+    document.getElementById('camSelectorWrap').classList.remove('hidden');
+  }
+
+  // 3. Pick camera: prefer back camera on mobile
+  let camId = cameras[cameras.length-1].id; // usually back cam is last
+  const backCam = cameras.find(c => /back|rear|environment/i.test(c.label||''));
+  if (backCam) camId = backCam.id;
+
+  document.getElementById('camSelect').value = camId;
+  document.getElementById('camSelect').onchange = async function(){
+    await stopCamera(true); // stop silently
+    await startWithId(this.value);
+  };
+
+  await startWithId(camId);
+}
+
+async function startWithId(camId) {
+  qrScanner = new Html5Qrcode('reader');
+  try {
+    await qrScanner.start(
+      camId,
+      { fps: 10, qrbox: function(w,h){ const s=Math.min(w,h)*0.7; return {width:s,height:s}; } },
+      onDetected,
+      () => {}
+    );
+    scanning = true;
+    document.getElementById('btnStop').classList.remove('hidden');
+    setStatus('badge-scanning','🔵 Scanning...');
+    setCamMsg('','');
+  } catch(e) {
+    console.error('Camera start error:', e);
+    showCamError('Could not start camera: '+e.message+'<br><small>Try selecting a different camera or use <strong>🖼 Photo Upload</strong>.</small>');
+  }
+}
+
+async function stopCamera(silent) {
+  if (qrScanner && scanning) {
+    try { await qrScanner.stop(); await qrScanner.clear(); } catch(e){}
+    scanning = false;
+    qrScanner = null;
+  }
+  if (!silent) {
+    document.getElementById('btnStart').classList.remove('hidden');
+    document.getElementById('btnStop').classList.add('hidden');
+    setStatus('badge-ready','🟢 Ready');
+  }
+}
+
+function showCamError(html) {
+  setStatus('badge-error','📵 Camera Error');
+  document.getElementById('btnStart').classList.remove('hidden');
+  document.getElementById('btnStop').classList.add('hidden');
+  setCamMsg(`<div class="alert alert-error">${html}</div>`);
+}
+
+function setCamMsg(html){
+  document.getElementById('camMsg').innerHTML = html||'';
+}
+
+function onDetected(text) {
+  if (text === lastSeen) return;
+  lastSeen = text;
+  verifyQR(text);
+}
+
+// ─────────────────────────────────────────────
+// PHOTO UPLOAD SCANNING
+// ─────────────────────────────────────────────
+async function scanFromFile(input) {
+  if (!shed()) { input.value=''; return; }
+  if (!input.files || !input.files[0]) return;
+
+  document.getElementById('imgSpinner').classList.remove('hidden');
+  document.getElementById('imgErr').classList.add('hidden');
+
+  try {
+    const r = new Html5Qrcode('fileReader');
+    const text = await r.scanFile(input.files[0], /* showImage= */ false);
+    document.getElementById('imgSpinner').classList.add('hidden');
+    input.value='';
+    verifyQR(text);
+  } catch(e) {
+    document.getElementById('imgSpinner').classList.add('hidden');
+    document.getElementById('imgErr').textContent = '❌ No QR code found in this image. Try again — ensure the QR is in focus and well-lit.';
+    document.getElementById('imgErr').classList.remove('hidden');
+    input.value='';
+  }
+}
+
+// ─────────────────────────────────────────────
+// MANUAL
+// ─────────────────────────────────────────────
+function verifyManual() {
+  const d = document.getElementById('manualTxt').value.trim();
+  if (!d) return;
+  if (!shed()) return;
+  verifyQR(d);
+}
+
+// ─────────────────────────────────────────────
+// VERIFY QR  (core API call)
+// ─────────────────────────────────────────────
+async function verifyQR(encData) {
+  const shedId = document.getElementById('shedSelect').value;
+  if (!shedId) { document.getElementById('shedWarn').classList.remove('hidden'); return; }
+
+  setStatus('badge-process','🟡 Verifying...');
+  if (scanning) await stopCamera(true);
+
+  document.getElementById('resultBox').innerHTML = `
+    <div style="text-align:center;padding:30px;">
+      <div class="spinner" style="width:36px;height:36px;border-width:3px;margin:0 auto;"></div>
+      <p style="margin-top:14px;color:var(--text-secondary);">Verifying QR code...</p>
+    </div>`;
+
+  try {
+    const res = await fetch('/api/scan/verify', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ encrypted_data: encData, fuel_shed_id: shedId })
+    });
+    const data = await res.json();
+    if (data.valid) { setStatus('badge-ready','✅ Verified'); showValid(data); }
+    else            { setStatus('badge-error','❌ Invalid');   showInvalid(data); }
+  } catch(e) {
+    setStatus('badge-error','⚠ Error');
+    document.getElementById('resultBox').innerHTML =
+      `<div class="alert alert-error" style="margin-top:16px;">Server error. Check your connection and try again.</div>`;
+  }
+}
+
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function showValid(data) {
+  const t = new Date(data.scanned_at).toLocaleString('en-GB',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  document.getElementById('resultBox').innerHTML = `
+    <div class="scan-result valid" style="margin-top:20px;">
+      <div class="result-title result-valid">✅ QR CODE VERIFIED</div>
+      <div class="result-grid" style="margin-bottom:16px;">
+        <div class="result-item"><div class="label">Vehicle Number</div>
+          <div class="value" style="font-size:1.25rem;background:var(--gradient-primary);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">${esc(data.vehicle.vehicle_number)}</div></div>
+        <div class="result-item"><div class="label">Fuel Type</div>
+          <div class="value"><span class="badge ${data.vehicle.fuel_type==='Petrol'?'badge-blue':'badge-orange'}">${data.vehicle.fuel_type==='Petrol'?'⚡':'🛢'} ${esc(data.vehicle.fuel_type)}</span></div></div>
+        <div class="result-item"><div class="label">Owner</div><div class="value">👤 ${esc(data.owner.name)}</div></div>
+        <div class="result-item"><div class="label">Mobile</div><div class="value">📞 ${esc(data.owner.mobile)}</div></div>
+        <div class="result-item"><div class="label">Chassis No</div><div class="value" style="font-size:0.88rem;">${esc(data.vehicle.chassis_number)}</div></div>
+        <div class="result-item"><div class="label">Fuel Shed</div><div class="value">⛽ ${esc(data.fuel_shed)}</div></div>
+      </div>
+      <div style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:10px;padding:12px;font-size:0.85rem;color:#10b981;">
+        ✅ Scan logged at <strong>${t}</strong>. Fuel transaction authorized.
+      </div>
+      <button class="btn btn-outline btn-full" onclick="resetScan()" style="margin-top:14px;">📡 Scan Next Vehicle</button>
+    </div>`;
+}
+
+function showInvalid(data) {
+  document.getElementById('resultBox').innerHTML = `
+    <div class="scan-result invalid" style="margin-top:20px;">
+      <div class="result-title result-invalid">❌ ${esc(data.error||'INVALID QR CODE')}</div>
+      <p class="invalid-message">${esc(data.message||'Vehicle not registered in system.')}</p>
+      <div style="margin-top:14px;padding:14px;background:rgba(239,68,68,0.1);border-radius:10px;font-size:0.85rem;color:#fca5a5;">
+        ⛔ <strong>DO NOT dispense fuel.</strong> QR code is invalid or vehicle not registered.
+      </div>
+      <button class="btn btn-outline btn-full" onclick="resetScan()" style="margin-top:14px;">🔄 Try Again</button>
+    </div>`;
+}
+
+function resetScan() {
+  lastSeen = '';
+  document.getElementById('resultBox').innerHTML = '';
+  document.getElementById('manualTxt').value = '';
+  document.getElementById('imgErr').classList.add('hidden');
+  document.getElementById('btnStart').classList.remove('hidden');
+  document.getElementById('btnStop').classList.add('hidden');
+  setStatus('badge-ready','🟢 Ready');
+}
+
+// ─── Init ───
+loadSheds();
+</script>
+</body>
+</html>

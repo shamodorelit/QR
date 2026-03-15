@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — Fuel QR System</title>
+  <meta name="description" content="Login to the Fuel QR Scan System to manage your vehicles and QR codes.">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="auth-page">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="logo-icon">⛽</div>
+      <h1>Fuel QR System</h1>
+      <p>Vehicle Fuel Authorization Platform</p>
+    </div>
+
+    <div id="alert" class="hidden"></div>
+
+    <form id="loginForm">
+      <div class="form-group">
+        <label class="form-label">Mobile Number</label>
+        <input type="tel" id="mobile" class="form-control" placeholder="0771234567" required maxlength="10">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input type="password" id="password" class="form-control" placeholder="Enter your password" required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-full" id="loginBtn">
+        <span id="btnText">Sign In</span>
+        <span id="btnSpinner" class="spinner hidden"></span>
+      </button>
+    </form>
+
+    <div class="divider"><span>New user?</span></div>
+    <a href="/register.html" class="btn btn-outline btn-full">Create Account</a>
+
+    <div class="mt-6 text-center">
+      <a href="/admin/index.html" class="text-sm text-muted" style="color: var(--text-muted); text-decoration: none;">Admin Portal →</a>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Redirect if already logged in
+  if (localStorage.getItem('fuelqr_token')) window.location.href = '/dashboard.html';
+
+  const form = document.getElementById('loginForm');
+  const alertEl = document.getElementById('alert');
+  const btnText = document.getElementById('btnText');
+  const btnSpinner = document.getElementById('btnSpinner');
+  const loginBtn = document.getElementById('loginBtn');
+
+  function showAlert(msg, type = 'error') {
+    alertEl.className = `alert alert-${type}`;
+    alertEl.textContent = msg;
+    alertEl.classList.remove('hidden');
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    alertEl.classList.add('hidden');
+    btnText.textContent = 'Signing in...';
+    btnSpinner.classList.remove('hidden');
+    loginBtn.disabled = true;
+
+    const mobile = document.getElementById('mobile').value.trim();
+    const password = document.getElementById('password').value;
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mobile, password })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Login failed.');
+
+      localStorage.setItem('fuelqr_token', data.token);
+      localStorage.setItem('fuelqr_user', JSON.stringify(data.user));
+      window.location.href = '/dashboard.html';
+    } catch (err) {
+      showAlert(err.message);
+      btnText.textContent = 'Sign In';
+      btnSpinner.classList.add('hidden');
+      loginBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

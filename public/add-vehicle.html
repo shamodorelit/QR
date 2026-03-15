@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Add Vehicle — Fuel QR System</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="/dashboard.html" class="nav-brand"><span class="icon">⛽</span> Fuel QR System</a>
+  <div class="nav-links">
+    <a href="/dashboard.html">← Dashboard</a>
+    <a href="#" onclick="logout()" style="color:var(--accent-red)">Logout</a>
+  </div>
+</nav>
+
+<div style="max-width:560px;margin:40px auto;padding:0 20px;">
+  <div class="page-header" style="padding:0;margin-bottom:24px;">
+    <h1>🚗 Add Vehicle</h1>
+    <p>Register a new vehicle to generate a secure QR code</p>
+  </div>
+
+  <div class="card">
+    <div id="alert" class="hidden"></div>
+    <form id="vehicleForm">
+      <div class="form-group">
+        <label class="form-label">Vehicle Number</label>
+        <input type="text" id="vehicle_number" class="form-control" placeholder="WP ABC 1234" required
+          style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()">
+        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:6px;">Example: WP ABC 1234 | CAB 9988</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Chassis Number</label>
+        <input type="text" id="chassis_number" class="form-control" placeholder="8FJH23492348" required
+          style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Fuel Type</label>
+        <select id="fuel_type" class="form-control" required>
+          <option value="">— Select Fuel Type —</option>
+          <option value="Petrol">⚡ Petrol</option>
+          <option value="Diesel">🛢 Diesel</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary btn-full" id="addBtn">
+        <span id="btnText">Register Vehicle & Generate QR</span>
+        <span id="btnSpinner" class="spinner hidden"></span>
+      </button>
+    </form>
+  </div>
+
+  <div class="card mt-6" style="border-color:rgba(59,130,246,0.2);background:rgba(59,130,246,0.05);">
+    <div style="display:flex;gap:14px;align-items:flex-start;">
+      <span style="font-size:2rem;">🔐</span>
+      <div>
+        <div style="font-weight:700;font-size:0.95rem;margin-bottom:6px;">Encrypted QR Security</div>
+        <div style="font-size:0.85rem;color:var(--text-secondary);line-height:1.7;">
+          Your QR code is generated with <strong>AES-256 encryption</strong>. Only fuel sheds connected to this system can verify it. Fake or copied QR codes will be instantly rejected.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const token = localStorage.getItem('fuelqr_token');
+  if (!token) window.location.href = '/login.html';
+
+  function logout() {
+    localStorage.removeItem('fuelqr_token');
+    localStorage.removeItem('fuelqr_user');
+    window.location.href = '/login.html';
+  }
+
+  const form = document.getElementById('vehicleForm');
+  const alertEl = document.getElementById('alert');
+  const btnText = document.getElementById('btnText');
+  const btnSpinner = document.getElementById('btnSpinner');
+  const addBtn = document.getElementById('addBtn');
+
+  function showAlert(msg, type = 'error') {
+    alertEl.className = `alert alert-${type}`;
+    alertEl.textContent = msg;
+    alertEl.classList.remove('hidden');
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    alertEl.classList.add('hidden');
+    btnText.textContent = 'Generating QR...';
+    btnSpinner.classList.remove('hidden');
+    addBtn.disabled = true;
+
+    const body = {
+      vehicle_number: document.getElementById('vehicle_number').value.trim(),
+      chassis_number: document.getElementById('chassis_number').value.trim(),
+      fuel_type: document.getElementById('fuel_type').value
+    };
+
+    try {
+      const res = await fetch('/api/vehicles', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to add vehicle.');
+
+      showAlert('Vehicle registered! Redirecting to QR code...', 'success');
+      setTimeout(() => window.location.href = `/vehicle-qr.html?id=${data.vehicle_id}`, 1500);
+    } catch (err) {
+      showAlert(err.message);
+      btnText.textContent = 'Register Vehicle & Generate QR';
+      btnSpinner.classList.add('hidden');
+      addBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

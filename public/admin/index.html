@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Login — Fuel QR System</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="auth-page">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="logo-icon" style="background:linear-gradient(135deg,#8b5cf6,#c084fc);">🛡</div>
+      <h1 style="background:linear-gradient(135deg,#8b5cf6,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Admin Portal</h1>
+      <p>Fuel QR System Administration</p>
+    </div>
+
+    <div id="alert" class="hidden"></div>
+
+    <form id="adminLoginForm">
+      <div class="form-group">
+        <label class="form-label">Admin Mobile</label>
+        <input type="tel" id="mobile" class="form-control" placeholder="0700000000" required maxlength="10">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input type="password" id="password" class="form-control" placeholder="Admin password" required>
+      </div>
+      <button type="submit" class="btn btn-full" style="background:linear-gradient(135deg,#8b5cf6,#c084fc);color:white;box-shadow:0 4px 20px rgba(139,92,246,0.4);border:none;border-radius:var(--radius-sm);padding:12px 24px;font-size:0.9rem;font-weight:600;cursor:pointer;transition:var(--transition);" id="loginBtn">
+        <span id="btnText">Admin Sign In</span>
+        <span id="btnSpinner" class="spinner hidden"></span>
+      </button>
+    </form>
+
+    <div class="mt-6 text-center">
+      <a href="/login.html" class="text-sm" style="color:var(--text-muted);text-decoration:none;">← User Portal</a>
+      &nbsp;|&nbsp;
+      <a href="/scan.html" class="text-sm" style="color:var(--text-muted);text-decoration:none;">⛽ Scan Portal</a>
+    </div>
+
+    <div class="alert alert-info mt-4" style="font-size:0.8rem;">
+      🔑 Default: <code>0700000000</code> / <code>Admin@123</code>
+    </div>
+  </div>
+</div>
+
+<script>
+  if (localStorage.getItem('fuelqr_admin_token')) window.location.href = '/admin/dashboard.html';
+
+  const form = document.getElementById('adminLoginForm');
+  const alertEl = document.getElementById('alert');
+  const btnText = document.getElementById('btnText');
+  const btnSpinner = document.getElementById('btnSpinner');
+  const loginBtn = document.getElementById('loginBtn');
+
+  function showAlert(msg, type = 'error') {
+    alertEl.className = `alert alert-${type}`;
+    alertEl.textContent = msg;
+    alertEl.classList.remove('hidden');
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    alertEl.classList.add('hidden');
+    btnText.textContent = 'Signing in...';
+    btnSpinner.classList.remove('hidden');
+    loginBtn.disabled = true;
+
+    try {
+      const res = await fetch('/api/auth/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mobile: document.getElementById('mobile').value.trim(),
+          password: document.getElementById('password').value
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Login failed.');
+
+      localStorage.setItem('fuelqr_admin_token', data.token);
+      localStorage.setItem('fuelqr_admin', JSON.stringify(data.admin));
+      window.location.href = '/admin/dashboard.html';
+    } catch (err) {
+      showAlert(err.message);
+      btnText.textContent = 'Admin Sign In';
+      btnSpinner.classList.add('hidden');
+      loginBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
