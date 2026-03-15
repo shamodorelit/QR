@@ -18,7 +18,7 @@ router.get('/fuel-sheds', async (req, res) => {
 });
 
 // POST /api/scan/verify - Verify scanned QR, log scan
-router.post('/verify', async (req, res) => {
+router.post('/scan/verify', async (req, res) => {
   try {
     const { encrypted_data, fuel_shed_id } = req.body;
     if (!encrypted_data || !fuel_shed_id) {
