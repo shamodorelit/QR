@@ -24,7 +24,7 @@ const seedDB = async () => {
 
     // Seed admin account
     const adminMobile = process.env.ADMIN_MOBILE || '0700000000';
-    const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@123';
+    const adminPassword = process.env.ADMIN_PASSWORD || 'Mynameis54321';
     const adminExists = await User.findOne({ mobile: adminMobile, role: 'admin' });
     if (!adminExists) {
       const password_hash = await bcrypt.hash(adminPassword, 12);
